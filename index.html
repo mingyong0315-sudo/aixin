@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>李潇琳 · 漫天飞爱 | 爱心与名字共舞</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+
+        body {
+            background: radial-gradient(circle at center, #0a0a1a 0%, #020105 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .info {
+            position: fixed;
+            bottom: 22px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            color: rgba(255, 240, 245, 0.95);
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            width: fit-content;
+            margin: 0 auto;
+            padding: 8px 24px;
+            border-radius: 60px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            pointer-events: none;
+            z-index: 10;
+            font-family: monospace;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 600px) {
+            .info { font-size: 10px; bottom: 16px; padding: 5px 18px; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="heartCanvas"></canvas>
+    <div class="info">❤️ 李潇琳 · 漫天飞爱 · 心随你动 ❤️</div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('heartCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            let width, height, centerX, centerY;
+            
+            // -------------------- 生成标准主心形点集（正立、饱满）--------------------
+            function generateHeartPoints() {
+                const points = [];
+                const steps = 240;
+                for (let i = 0; i <= steps; i++) {
+                    const t = (i / steps) * Math.PI * 2;
+                    let x = 16 * Math.pow(Math.sin(t), 3);
+                    let y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+                    y = -y;  // 翻转使尖角向下
+                    x *= 1.02;
+                    y *= 1.02;
+                    points.push({ x, y });
+                }
+                return points;
+            }
+            
+            let baseHeartPoints = generateHeartPoints();
+            
+            function getHeartBounds(points) {
+                let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+                for (let p of points) {
+                    if (p.x < minX) minX = p.x;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y < minY) minY = p.y;
+                    if (p.y > maxY) maxY = p.y;
+                }
+                return { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY };
+            }
+            
+            let heartBounds = getHeartBounds(baseHeartPoints);
+            let baseScale = 1;
+            let offsetDrawX = 0, offsetDrawY = 0;
+            
+            // ---------- 粒子系统 (浪漫星尘) ----------
+            const PARTICLE_COUNT = 320;
+            let particles = [];
+            const colorPalette = ['#ffb7c5', '#ff8da1', '#ff6b8b', '#ff4d6d', '#ff9f6e', '#ffb347', '#ffd966', '#ffb3ba', '#ffc8dd', '#ffe0f0', '#ffa5c0'];
+            
+            class Particle {
+                constructor(x, y, vx, vy, r, color, alpha, alphaSpeed) {
+                    this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+                    this.r = r; this.color = color; this.alpha = alpha; this.alphaSpeed = alphaSpeed;
+                    this.currentR = r;
+                }
+                update(w, h, intensity) {
+                    this.vx += (Math.random() - 0.5) * 0.07 + (intensity - 0.8) * 0.07 * (Math.random() - 0.5);
+                    this.vy += (Math.random() - 0.5) * 0.07 + (intensity - 0.8) * 0.07 * (Math.random() - 0.5);
+                    const maxSpd = 1.5;
+                    if (Math.abs(this.vx) > maxSpd) this.vx = this.vx > 0 ? maxSpd : -maxSpd;
+                    if (Math.abs(this.vy) > maxSpd) this.vy = this.vy > 0 ? maxSpd : -maxSpd;
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    const margin = 18;
+                    if (this.x - this.r < margin) { this.x = margin + this.r; this.vx = -this.vx * 0.9; }
+                    if (this.x + this.r > w - margin) { this.x = w - margin - this.r; this.vx = -this.vx * 0.9; }
+                    if (this.y - this.r < margin) { this.y = margin + this.r; this.vy = -this.vy * 0.9; }
+                    if (this.y + this.r > h - margin) { this.y = h - margin - this.r; this.vy = -this.vy * 0.9; }
+                    
+                    this.alpha += this.alphaSpeed;
+                    if (this.alpha > 0.92 || this.alpha < 0.35) this.alphaSpeed = -this.alphaSpeed;
+                    this.alpha = Math.min(0.92, Math.max(0.35, this.alpha));
+                    this.currentR = this.r * (0.8 + intensity * 0.45);
+                }
+                draw(ctx) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.currentR, 0, Math.PI * 2);
+                    ctx.fillStyle = this.color;
+                    ctx.globalAlpha = this.alpha * 0.85;
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(this.x - 0.8, this.y - 0.8, this.r * 0.28, 0, Math.PI * 2);
+                    ctx.fillStyle = '#fffaea';
+                    ctx.globalAlpha = this.alpha * 0.5;
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+            
+            function initParticles(w, h) {
+                let parts = [];
+                for (let i = 0; i < PARTICLE_COUNT; i++) {
+                    let x, y;
+                    if (Math.random() < 0.7) {
+                        x = w/2 + (Math.random() - 0.5) * Math.min(w, h) * 0.7;
+                        y = h/2 + (Math.random() - 0.5) * Math.min(w, h) * 0.6;
+                    } else {
+                        x = Math.random() * w;
+                        y = Math.random() * h;
+                    }
+                    x = Math.min(w - 20, Math.max(20, x));
+                    y = Math.min(h - 20, Math.max(20, y));
+                    let vx = (Math.random() - 0.5) * 0.85;
+                    let vy = (Math.random() - 0.5) * 0.85;
+                    let r = 2 + Math.random() * 5.2;
+                    let col = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+                    let alpha = 0.4 + Math.random() * 0.55;
+                    let aSpd = (Math.random() * 0.012 + 0.003) * (Math.random() > 0.5 ? 1 : -1);
+                    parts.push(new Particle(x, y, vx, vy, r, col, alpha, aSpd));
+                }
+                return parts;
+            }
+            
+            // ---------- 全屏飞舞的小爱心 (大小差异大，速度范围宽) ----------
+            const FLOATING_HEARTS_COUNT = 55;
+            let floatingHearts = [];
+            
+            function getSmallHeartPath(ctx, x, y, size, rotation) {
+                const w = size;
+                const h = size * 0.92;
+                const path = new Path2D();
+                path.moveTo(0, -h * 0.4);
+                path.bezierCurveTo(-w * 0.35, -h * 0.7, -w * 0.7, -h * 0.2, 0, h * 0.5);
+                path.bezierCurveTo(w * 0.7, -h * 0.2, w * 0.35, -h * 0.7, 0, -h * 0.4);
+                return path;
+            }
+            
+            class FloatingHeart {
+                constructor(x, y, vx, vy, size, angle, angleSpeed, alpha, colorVar, accRandomness) {
+                    this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+                    this.size = size;
+                    this.angle = angle;
+                    this.angleSpeed = angleSpeed;
+                    this.alpha = alpha;
+                    this.alphaSpeed = (Math.random() * 0.02 + 0.008) * (Math.random() > 0.5 ? 1 : -1);
+                    this.color = colorVar;
+                    this.scalePulse = 1;
+                    this.pulseSpeed = 0.02 + Math.random() * 0.05;
+                    this.accRandomness = accRandomness;
+                }
+                update(w, h, intensity) {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    const margin = -45;
+                    if (this.x + this.size * 0.5 < margin) { this.x = margin - this.size * 0.5; this.vx = -this.vx; }
+                    if (this.x - this.size * 0.5 > w - margin) { this.x = w - margin + this.size * 0.5; this.vx = -this.vx; }
+                    if (this.y + this.size * 0.5 < margin) { this.y = margin - this.size * 0.5; this.vy = -this.vy; }
+                    if (this.y - this.size * 0.5 > h - margin) { this.y = h - margin + this.size * 0.5; this.vy = -this.vy; }
+                    
+                    const randAmp = 0.12 * this.accRandomness;
+                    this.vx += (Math.random() - 0.5) * randAmp;
+                    this.vy += (Math.random() - 0.5) * randAmp;
+                    const maxSpeed = 3.8;
+                    if (Math.abs(this.vx) > maxSpeed) this.vx = this.vx > 0 ? maxSpeed : -maxSpeed;
+                    if (Math.abs(this.vy) > maxSpeed) this.vy = this.vy > 0 ? maxSpeed : -maxSpeed;
+                    
+                    this.angleSpeed += (Math.random() - 0.5) * 0.012;
+                    this.angleSpeed = Math.min(0.1, Math.max(-0.1, this.angleSpeed));
+                    this.angle += this.angleSpeed;
+                    
+                    this.alpha += this.alphaSpeed;
+                    if (this.alpha > 0.92 || this.alpha < 0.25) this.alphaSpeed = -this.alphaSpeed;
+                    this.alpha = Math.min(0.92, Math.max(0.25, this.alpha));
+                    
+                    this.scalePulse = 0.85 + Math.sin(Date.now() * 0.008 * this.pulseSpeed) * 0.2;
+                }
+                draw(ctx) {
+                    ctx.save();
+                    ctx.shadowBlur = 0;
+                    ctx.translate(this.x, this.y);
+                    ctx.rotate(this.angle);
+                    const currentSize = this.size * (0.8 + this.scalePulse * 0.2);
+                    const path = getSmallHeartPath(ctx, 0, 0, currentSize, 0);
+                    ctx.fillStyle = this.color;
+                    ctx.globalAlpha = this.alpha;
+                    ctx.fill(path);
+                    ctx.beginPath();
+                    ctx.moveTo(-currentSize*0.2, -currentSize*0.25);
+                    ctx.quadraticCurveTo(-currentSize*0.08, -currentSize*0.4, currentSize*0.1, -currentSize*0.3);
+                    ctx.fillStyle = 'rgba(255, 250, 240, 0.5)';
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+            
+            function initFloatingHearts(w, h) {
+                const hearts = [];
+                const colors = ['#ff6b8b', '#ff8da1', '#ff4d6d', '#ff9f6e', '#ffb347', '#ff7b9c', '#ffa5c0', '#ffd0b5', '#ffb3c6', '#ff7795', '#ffc2d9'];
+                for (let i = 0; i < FLOATING_HEARTS_COUNT; i++) {
+                    const x = Math.random() * w;
+                    const y = Math.random() * h;
+                    const vx = (Math.random() - 0.5) * 7.0;
+                    const vy = (Math.random() - 0.5) * 7.0;
+                    const size = 10 + Math.random() * 38;
+                    const angle = Math.random() * Math.PI * 2;
+                    const angleSpeed = (Math.random() - 0.5) * 0.1;
+                    const alpha = 0.5 + Math.random() * 0.4;
+                    const color = colors[Math.floor(Math.random() * colors.length)];
+                    const accRandomness = 0.5 + Math.random() * 1.3;
+                    hearts.push(new FloatingHeart(x, y, vx, vy, size, angle, angleSpeed, alpha, color, accRandomness));
+                }
+                return hearts;
+            }
+            
+            // ---------- 新增：李潇琳名字飘浮系统 (到处飞) ----------
+            const NAMES_COUNT = 45;
+            let floatingNames = [];
+            const nameColors = ['#ffb3ba', '#ff8da1', '#ff6b8b', '#ffd966', '#ffb347', '#ffa5c0', '#ffc8dd', '#ff9f6e', '#ff7b9c', '#ffccdd'];
+            
+            class FloatingName {
+                constructor(x, y, vx, vy, fontSize, angle, angleSpeed, alpha, color) {
+                    this.x = x; this.y = y;
+                    this.vx = vx; this.vy = vy;
+                    this.fontSize = fontSize;
+                    this.angle = angle;
+                    this.angleSpeed = angleSpeed;
+                    this.alpha = alpha;
+                    this.alphaSpeed = (Math.random() * 0.018 + 0.006) * (Math.random() > 0.5 ? 1 : -1);
+                    this.color = color;
+                    this.text = "李潇琳";
+                    // 随机轻微缩放波动速度
+                    this.scalePulse = 1;
+                    this.pulseSpeed = 0.01 + Math.random() * 0.04;
+                }
+                
+                update(w, h, intensity) {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    const margin = -50;
+                    if (this.x + this.fontSize * 0.8 < margin) { this.x = margin - this.fontSize * 0.8; this.vx = -this.vx; }
+                    if (this.x - this.fontSize * 0.8 > w - margin) { this.x = w - margin + this.fontSize * 0.8; this.vx = -this.vx; }
+                    if (this.y + this.fontSize * 0.5 < margin) { this.y = margin - this.fontSize * 0.5; this.vy = -this.vy; }
+                    if (this.y - this.fontSize * 0.5 > h - margin) { this.y = h - margin + this.fontSize * 0.5; this.vy = -this.vy; }
+                    
+                    // 随机加速度（名字飞舞更灵动）
+                    this.vx += (Math.random() - 0.5) * 0.1;
+                    this.vy += (Math.random() - 0.5) * 0.1;
+                    const maxSpeed = 4.0;
+                    if (Math.abs(this.vx) > maxSpeed) this.vx = this.vx > 0 ? maxSpeed : -maxSpeed;
+                    if (Math.abs(this.vy) > maxSpeed) this.vy = this.vy > 0 ? maxSpeed : -maxSpeed;
+                    
+                    // 旋转角速度变化
+                    this.angleSpeed += (Math.random() - 0.5) * 0.008;
+                    this.angleSpeed = Math.min(0.08, Math.max(-0.08, this.angleSpeed));
+                    this.angle += this.angleSpeed;
+                    
+                    // 透明度呼吸
+                    this.alpha += this.alphaSpeed;
+                    if (this.alpha > 0.9 || this.alpha < 0.3) this.alphaSpeed = -this.alphaSpeed;
+                    this.alpha = Math.min(0.9, Math.max(0.3, this.alpha));
+                    
+                    // 字体大小随心跳微变
+                    this.scalePulse = 0.92 + Math.sin(Date.now() * 0.006 * this.pulseSpeed) * 0.1;
+                }
+                
+                draw(ctx) {
+                    ctx.save();
+                    ctx.shadowBlur = 4;
+                    ctx.shadowColor = "rgba(255, 100, 130, 0.6)";
+                    ctx.translate(this.x, this.y);
+                    ctx.rotate(this.angle);
+                    const currentFontSize = this.fontSize * (0.85 + this.scalePulse * 0.15);
+                    ctx.font = `500 ${currentFontSize}px "Segoe UI", "PingFang SC", "Microsoft YaHei", "Dancing Script", cursive`;
+                    ctx.fillStyle = this.color;
+                    ctx.globalAlpha = this.alpha;
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(this.text, 0, 0);
+                    // 加一点淡淡的高光描边
+                    ctx.shadowBlur = 2;
+                    ctx.strokeStyle = 'rgba(255, 220, 220, 0.4)';
+                    ctx.lineWidth = 1.5;
+                    ctx.strokeText(this.text, 0, 0);
+                    ctx.restore();
+                }
+            }
+            
+            function initFloatingNames(w, h) {
+                const names = [];
+                for (let i = 0; i < NAMES_COUNT; i++) {
+                    const x = Math.random() * w;
+                    const y = Math.random() * h;
+                    // 速度范围 -3.5 ~ 3.5
+                    const vx = (Math.random() - 0.5) * 7.0;
+                    const vy = (Math.random() - 0.5) * 7.0;
+                    const fontSize = 16 + Math.random() * 36; // 16~52px
+                    const angle = Math.random() * Math.PI * 2;
+                    const angleSpeed = (Math.random() - 0.5) * 0.08;
+                    const alpha = 0.45 + Math.random() * 0.45;
+                    const color = nameColors[Math.floor(Math.random() * nameColors.length)];
+                    names.push(new FloatingName(x, y, vx, vy, fontSize, angle, angleSpeed, alpha, color));
+                }
+                return names;
+            }
+            
+            // ---------- 主心形相关函数 ----------
+            function updateHeartTransform() {
+                const targetWidth = Math.min(width, height) * 0.48;
+                baseScale = targetWidth / heartBounds.width;
+                const heartCenterX = (heartBounds.minX + heartBounds.maxX) / 2;
+                const heartCenterY = (heartBounds.minY + heartBounds.maxY) / 2;
+                offsetDrawX = centerX - heartCenterX * baseScale;
+                offsetDrawY = centerY - heartCenterY * baseScale;
+            }
+            
+            function drawBackground() {
+                const grad = ctx.createRadialGradient(centerX, centerY, 80, centerX, centerY, Math.max(width, height) * 0.8);
+                grad.addColorStop(0, '#150e24');
+                grad.addColorStop(0.5, '#0c091c');
+                grad.addColorStop(1, '#02010a');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, width, height);
+                const starCount = Math.floor(width * height / 2800);
+                for (let i = 0; i < starCount; i++) {
+                    let sx = (i * 157) % width;
+                    let sy = (i * 263) % height;
+                    ctx.globalAlpha = 0.15 + Math.sin(i) * 0.08;
+                    ctx.fillStyle = '#fff9e6';
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, (i % 3) * 0.7 + 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+            }
+            
+            function drawMainHeart(scaleFactor, intensity) {
+                const currentScale = baseScale * scaleFactor;
+                ctx.save();
+                ctx.shadowBlur = 0;
+                ctx.beginPath();
+                const first = baseHeartPoints[0];
+                ctx.moveTo(first.x * currentScale + offsetDrawX, first.y * currentScale + offsetDrawY);
+                for (let i = 1; i < baseHeartPoints.length; i++) {
+                    const p = baseHeartPoints[i];
+                    ctx.lineTo(p.x * currentScale + offsetDrawX, p.y * currentScale + offsetDrawY);
+                }
+                ctx.closePath();
+                
+                const gradHeart = ctx.createLinearGradient(centerX - 60, centerY - 70, centerX + 60, centerY + 70);
+                gradHeart.addColorStop(0, '#ff5577');
+                gradHeart.addColorStop(0.35, '#ff2e5c');
+                gradHeart.addColorStop(0.7, '#dc1c4e');
+                gradHeart.addColorStop(1, '#a01038');
+                ctx.fillStyle = gradHeart;
+                ctx.shadowColor = `rgba(255, 70, 110, ${0.65 + intensity * 0.3})`;
+                ctx.shadowBlur = 24 * (0.7 + intensity * 0.5);
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(first.x * currentScale + offsetDrawX, first.y * currentScale + offsetDrawY);
+                for (let i = 1; i < baseHeartPoints.length; i++) {
+                    const p = baseHeartPoints[i];
+                    ctx.lineTo(p.x * currentScale + offsetDrawX, p.y * currentScale + offsetDrawY);
+                }
+                ctx.closePath();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.strokeStyle = '#ffccdd';
+                ctx.lineWidth = 2.6;
+                ctx.shadowBlur = 8;
+                ctx.stroke();
+                
+                ctx.beginPath();
+                const highlightX = -15 * currentScale;
+                const highlightY = -32 * currentScale;
+                ctx.moveTo(centerX + highlightX, centerY + highlightY);
+                ctx.quadraticCurveTo(centerX - 6 * currentScale, centerY - 48 * currentScale, centerX + 10 * currentScale, centerY - 38 * currentScale);
+                ctx.quadraticCurveTo(centerX, centerY - 28 * currentScale, centerX - 10 * currentScale, centerY - 30 * currentScale);
+                ctx.fillStyle = 'rgba(255, 245, 245, 0.45)';
+                ctx.fill();
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.restore();
+            }
+            
+            function drawOuterGlow(scaleFactor, intensity) {
+                const currentScale = baseScale * scaleFactor;
+                ctx.save();
+                ctx.beginPath();
+                const first = baseHeartPoints[0];
+                ctx.moveTo(first.x * currentScale + offsetDrawX, first.y * currentScale + offsetDrawY);
+                for (let i = 1; i < baseHeartPoints.length; i++) {
+                    const p = baseHeartPoints[i];
+                    ctx.lineTo(p.x * currentScale + offsetDrawX, p.y * currentScale + offsetDrawY);
+                }
+                ctx.closePath();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.lineWidth = 12 + intensity * 10;
+                ctx.strokeStyle = `rgba(255, 120, 170, ${0.2 + intensity * 0.18})`;
+                ctx.stroke();
+                ctx.lineWidth = 5;
+                ctx.strokeStyle = `rgba(255, 200, 210, ${0.35 + intensity * 0.2})`;
+                ctx.stroke();
+                ctx.restore();
+            }
+            
+            function drawDust(intensity) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                const dustCount = Math.floor(40 + intensity * 12);
+                for (let i = 0; i < dustCount; i++) {
+                    const angle = animTime * 1.6 + i * 0.55;
+                    const radius = Math.min(width, height) * 0.24 + Math.sin(animTime * 2.3) * 22;
+                    const x = centerX + Math.cos(angle) * radius * (0.7 + intensity * 0.35);
+                    const y = centerY + Math.sin(angle * 1.2) * radius * 0.85;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 2.8 + Math.sin(animTime * 5 + i) * 1.2, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 150, 180, ${0.15 + intensity * 0.12})`;
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+            
+            // 心跳动画
+            let animTime = 0;
+            let lastTimestamp = 0;
+            function getHeartbeatScale(t) {
+                const period = 1.18;
+                const phase = (t % period) / period;
+                let scale = 0.92;
+                if (phase < 0.22) {
+                    const p = phase / 0.22;
+                    scale = 0.92 + p * 0.3;
+                } else if (phase < 0.34) {
+                    const p = (phase - 0.22) / 0.12;
+                    scale = 1.22 - p * 0.2;
+                } else if (phase < 0.60) {
+                    const p = (phase - 0.34) / 0.26;
+                    scale = 1.02 + p * 0.1;
+                } else if (phase < 0.72) {
+                    const p = (phase - 0.60) / 0.12;
+                    scale = 1.12 - p * 0.14;
+                } else {
+                    const p = (phase - 0.72) / 0.28;
+                    scale = 0.98 - p * 0.08;
+                }
+                const breathe = 0.94 + Math.sin(t * 0.5) * 0.035;
+                let final = scale * breathe;
+                return Math.min(1.22, Math.max(0.86, final));
+            }
+            
+            function getIntensity(scale) {
+                return 0.65 + (scale - 0.86) / 0.36 * 0.9;
+            }
+            
+            function updateParticlesAndDraw(intensity) {
+                for (let p of particles) p.update(width, height, intensity);
+                for (let p of particles) p.draw(ctx);
+            }
+            
+            function updateFloatingHeartsAndDraw(intensity) {
+                for (let h of floatingHearts) h.update(width, height, intensity);
+                for (let h of floatingHearts) h.draw(ctx);
+            }
+            
+            function updateFloatingNamesAndDraw(intensity) {
+                for (let n of floatingNames) n.update(width, height, intensity);
+                for (let n of floatingNames) n.draw(ctx);
+            }
+            
+            // 响应窗口大小
+            function resizeCanvas() {
+                width = window.innerWidth;
+                height = window.innerHeight;
+                canvas.width = width;
+                canvas.height = height;
+                centerX = width / 2;
+                centerY = height / 2;
+                updateHeartTransform();
+                particles = initParticles(width, height);
+                floatingHearts = initFloatingHearts(width, height);
+                floatingNames = initFloatingNames(width, height);
+            }
+            
+            // 动画循环
+            let animFrame = null;
+            function renderFrame(now) {
+                if (!lastTimestamp) {
+                    lastTimestamp = now;
+                    animFrame = requestAnimationFrame(renderFrame);
+                    return;
+                }
+                let delta = Math.min(0.033, (now - lastTimestamp) / 1000);
+                if (delta > 0) animTime += delta;
+                lastTimestamp = now;
+                
+                const heartScale = getHeartbeatScale(animTime);
+                const intensity = getIntensity(heartScale);
+                
+                drawBackground();
+                // 飞舞的名字（背景层）
+                updateFloatingNamesAndDraw(intensity);
+                // 飞舞的小爱心
+                updateFloatingHeartsAndDraw(intensity);
+                // 粒子
+                updateParticlesAndDraw(intensity);
+                // 主心形
+                drawMainHeart(heartScale, intensity);
+                drawOuterGlow(heartScale, intensity);
+                drawDust(intensity);
+                
+                animFrame = requestAnimationFrame(renderFrame);
+            }
+            
+            window.addEventListener('resize', () => { resizeCanvas(); });
+            
+            // 鼠标/触摸推动效果 (让名字和爱心更生动)
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                let mx = (e.clientX - rect.left) * scaleX;
+                let my = (e.clientY - rect.top) * scaleY;
+                for (let n of floatingNames) {
+                    const dx = n.x - mx, dy = n.y - my;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 100) {
+                        const angle = Math.atan2(dy, dx);
+                        const force = (1 - dist / 110) * 0.6;
+                        n.vx += Math.cos(angle) * force;
+                        n.vy += Math.sin(angle) * force;
+                        let spd = Math.hypot(n.vx, n.vy);
+                        if (spd > 4.5) { n.vx *= 4.0/spd; n.vy *= 4.0/spd; }
+                    }
+                }
+                for (let h of floatingHearts) {
+                    const dx = h.x - mx, dy = h.y - my;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 100) {
+                        const angle = Math.atan2(dy, dx);
+                        const force = (1 - dist / 110) * 0.7;
+                        h.vx += Math.cos(angle) * force;
+                        h.vy += Math.sin(angle) * force;
+                        let spd = Math.hypot(h.vx, h.vy);
+                        if (spd > 4.0) { h.vx *= 3.5/spd; h.vy *= 3.5/spd; }
+                    }
+                }
+                for (let p of particles) {
+                    const dx = p.x - mx, dy = p.y - my;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 85) {
+                        const angle = Math.atan2(dy, dx);
+                        const force = (1 - dist / 90) * 0.65;
+                        p.vx += Math.cos(angle) * force * 0.2;
+                        p.vy += Math.sin(angle) * force * 0.2;
+                        let spd = Math.hypot(p.vx, p.vy);
+                        if (spd > 2.3) { p.vx *= 2.2/spd; p.vy *= 2.2/spd; }
+                    }
+                }
+            });
+            
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const touch = e.touches[0];
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                let mx = (touch.clientX - rect.left) * scaleX;
+                let my = (touch.clientY - rect.top) * scaleY;
+                for (let n of floatingNames) {
+                    const dx = n.x - mx, dy = n.y - my;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 100) {
+                        const angle = Math.atan2(dy, dx);
+                        const force = (1 - dist / 110) * 0.6;
+                        n.vx += Math.cos(angle) * force;
+                        n.vy += Math.sin(angle) * force;
+                        let spd = Math.hypot(n.vx, n.vy);
+                        if (spd > 4.5) { n.vx *= 4.0/spd; n.vy *= 4.0/spd; }
+                    }
+                }
+                for (let h of floatingHearts) {
+                    const dx = h.x - mx, dy = h.y - my;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 100) {
+                        const angle = Math.atan2(dy, dx);
+                        const force = (1 - dist / 110) * 0.7;
+                        h.vx += Math.cos(angle) * force;
+                        h.vy += Math.sin(angle) * force;
+                        let spd = Math.hypot(h.vx, h.vy);
+                        if (spd > 4.0) { h.vx *= 3.5/spd; h.vy *= 3.5/spd; }
+                    }
+                }
+                for (let p of particles) {
+                    const dx = p.x - mx, dy = p.y - my;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 80) {
+                        const angle = Math.atan2(dy, dx);
+                        const force = (1 - dist / 85) * 0.6;
+                        p.vx += Math.cos(angle) * force * 0.25;
+                        p.vy += Math.sin(angle) * force * 0.25;
+                        let spd = Math.hypot(p.vx, p.vy);
+                        if (spd > 2.4) { p.vx *= 2.0/spd; p.vy *= 2.0/spd; }
+                    }
+                }
+            }, { passive: false });
+            
+            resizeCanvas();
+            animFrame = requestAnimationFrame(renderFrame);
+            
+            window.addEventListener('beforeunload', () => {
+                if (animFrame) cancelAnimationFrame(animFrame);
+            });
+        })();
+    </script>
+</body>
+</html>
